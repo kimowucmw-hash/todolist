@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>我的待辦</title>
+
+<!-- 字型 -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;600;700&family=LXGW+WenKai+TC:wght@400;700&display=swap" rel="stylesheet">
+
+<!-- Firebase（compat 版，普通 script 即可用，可直接雙擊開啟測試） -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+<style>
+:root{
+  --paper:#FBF8F0;
+  --paper-2:#FFFDF7;
+  --ink:#3D3A33;
+  --ink-soft:#8A8678;
+  --dot:#E2DBCB;
+  --line:#E7E0D0;
+  /* washi 配色 */
+  --butter:#FBEFB8; --butter-tape:#EFCF55;
+  --rose:#F6DCD5;   --rose-tape:#DE9F94;
+  --sage:#DDE8CF;   --sage-tape:#9FB984;
+  --sky:#D9E4EC;    --sky-tape:#85A1B8;
+  --shadow:0 6px 18px rgba(80,70,50,.10), 0 1px 2px rgba(80,70,50,.08);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+html,body{margin:0;padding:0;}
+body{
+  font-family:'LXGW WenKai TC','BiauKai','DFKai-SB','標楷體','Noto Sans TC',cursive,sans-serif;
+  color:var(--ink);
+  background-color:var(--paper);
+  background-image:radial-gradient(var(--dot) 1.4px, transparent 1.4px);
+  background-size:22px 22px;
+  background-position:-11px -11px;
+  min-height:100vh;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:860px;margin:0 auto;padding:22px 16px 90px;}
+
+/* ---- 抬頭 ---- */
+header{position:relative;margin:8px 4px 22px;}
+.title{
+  font-size:38px;font-weight:700;letter-spacing:1px;margin:0;display:inline-block;position:relative;
+}
+.title::after{
+  content:"";position:absolute;left:-2px;right:-6px;bottom:4px;height:11px;
+  background:var(--sage-tape);opacity:.45;z-index:-1;transform:rotate(-1deg);border-radius:3px;
+}
+.date{font-family:'Caveat',cursive;font-size:22px;color:var(--ink-soft);margin-top:2px;}
+.sync-badge{
+  position:absolute;top:2px;right:0;display:flex;align-items:center;gap:6px;
+  font-family:'Caveat',cursive;font-size:17px;cursor:pointer;
+  background:var(--paper-2);border:1.5px solid var(--line);border-radius:20px;padding:5px 12px;
+  box-shadow:var(--shadow);user-select:none;
+}
+.sync-dot{width:9px;height:9px;border-radius:50%;background:#bbb;}
+.sync-dot.online{background:#7BB661;} .sync-dot.local{background:#D9A441;}
+.sync-dot.error{background:#D06B5C;} .sync-dot.connecting{background:#85A1B8;animation:pulse 1s infinite;}
+@keyframes pulse{50%{opacity:.35;}}
+
+/* ---- 分頁 ---- */
+.tabs{display:flex;gap:10px;margin:0 4px 18px;}
+.tab{
+  font-family:inherit;font-size:19px;font-weight:700;color:var(--ink-soft);
+  background:transparent;border:none;cursor:pointer;padding:6px 4px 8px;position:relative;
+}
+.tab .cnt{font-family:'Caveat',cursive;font-size:15px;font-weight:600;
+  background:var(--line);border-radius:10px;padding:0 7px;margin-left:5px;color:var(--ink-soft);}
+.tab.active{color:var(--ink);}
+.tab.active::after{
+  content:"";position:absolute;left:0;right:0;bottom:0;height:9px;border-radius:4px;
+  background:var(--butter-tape);opacity:.55;transform:rotate(-.6deg);
+}
+.tab.active .cnt{background:var(--butter-tape);color:#5a4a14;}
+
+/* ---- 備忘錄 ---- */
+#memoView .add-memo{
+  display:flex;align-items:center;justify-content:center;gap:8px;width:100%;
+  font-family:inherit;font-size:18px;color:var(--ink-soft);cursor:pointer;
+  background:var(--paper-2);border:2px dashed var(--line);border-radius:14px;padding:16px;
+  margin-bottom:18px;transition:.15s;
+}
+#memoView .add-memo:hover{border-color:var(--sage-tape);color:var(--ink);}
+.memo-grid{columns:3;column-gap:16px;}
+@media(max-width:720px){.memo-grid{columns:2;}}
+@media(max-width:460px){.memo-grid{columns:1;}}
+.memo{
+  break-inside:avoid;margin:0 0 16px;position:relative;border-radius:6px;padding:26px 16px 14px;
+  box-shadow:var(--shadow);background:var(--paper-2);
+}
+.memo::before{ /* washi 膠帶 */
+  content:"";position:absolute;top:-9px;left:50%;width:74px;height:22px;
+  transform:translateX(-50%) rotate(-3deg);opacity:.9;
+  background-image:linear-gradient(135deg,rgba(255,255,255,.35) 25%,transparent 25%,transparent 50%,rgba(255,255,255,.35) 50%,rgba(255,255,255,.35) 75%,transparent 75%);
+  background-size:8px 8px;border-radius:1px;
+  box-shadow:0 1px 2px rgba(0,0,0,.06);
+}
+.memo.butter{background:var(--butter);} .memo.butter::before{background-color:var(--butter-tape);}
+.memo.rose{background:var(--rose);}     .memo.rose::before{background-color:var(--rose-tape);}
+.memo.sage{background:var(--sage);}     .memo.sage::before{background-color:var(--sage-tape);}
+.memo.sky{background:var(--sky);}       .memo.sky::before{background-color:var(--sky-tape);}
+.memo.plain::before{background-color:#E4DECF;}
+.memo textarea{
+  width:100%;border:none;background:transparent;resize:none;outline:none;overflow:hidden;
+  font-family:inherit;font-size:18px;line-height:1.55;color:var(--ink);min-height:54px;
+}
+.memo .foot{display:flex;align-items:center;justify-content:space-between;margin-top:8px;opacity:0;transition:.15s;}
+.memo:hover .foot,.memo:focus-within .foot{opacity:1;}
+.colors{display:flex;gap:6px;}
+.swatch{width:15px;height:15px;border-radius:50%;cursor:pointer;border:1.5px solid rgba(0,0,0,.08);}
+.swatch[data-c=butter]{background:var(--butter-tape);}
+.swatch[data-c=rose]{background:var(--rose-tape);}
+.swatch[data-c=sage]{background:var(--sage-tape);}
+.swatch[data-c=sky]{background:var(--sky-tape);}
+.swatch[data-c=plain]{background:#fff;}
+.del{font-family:'Caveat',cursive;font-size:16px;color:var(--ink-soft);cursor:pointer;background:none;border:none;}
+.del:hover{color:#D06B5C;}
+
+/* ---- 待辦清單 ---- */
+#todoView{background:var(--paper-2);border-radius:14px;box-shadow:var(--shadow);
+  padding:6px 18px 18px;background-image:repeating-linear-gradient(transparent,transparent 47px,var(--line) 47px,var(--line) 48px);}
+.todo-add{display:flex;align-items:center;gap:10px;height:48px;border-bottom:0;}
+.todo-add input{flex:1;border:none;background:transparent;outline:none;
+  font-family:inherit;font-size:19px;color:var(--ink);}
+.todo-add .plus{font-size:24px;color:var(--sage-tape);font-weight:700;}
+.todo{display:flex;align-items:center;gap:12px;height:48px;}
+.box{flex:none;width:24px;height:24px;border:2px solid var(--ink-soft);border-radius:6px;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;background:transparent;transition:.12s;}
+.box svg{width:16px;height:16px;stroke:var(--sage-tape);stroke-width:3.4;fill:none;
+  stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:30;stroke-dashoffset:30;}
+.todo.done .box{border-color:var(--sage-tape);background:rgba(159,185,132,.16);}
+.todo.done .box svg{stroke-dashoffset:0;transition:stroke-dashoffset .25s;}
+.todo .txt{flex:1;border:none;background:transparent;outline:none;
+  font-family:inherit;font-size:19px;color:var(--ink);}
+.todo.done .txt{color:var(--ink-soft);text-decoration:line-through;text-decoration-color:var(--rose-tape);}
+.todo .del{opacity:0;}
+.todo:hover .del{opacity:1;}
+
+.empty{font-family:'Caveat',cursive;font-size:20px;color:var(--ink-soft);text-align:center;padding:38px 0;}
+
+/* ---- 設定面板 ---- */
+.mask{position:fixed;inset:0;background:rgba(60,55,45,.35);display:none;align-items:center;justify-content:center;z-index:50;padding:18px;}
+.mask.show{display:flex;}
+.panel{background:var(--paper-2);border-radius:16px;box-shadow:0 20px 50px rgba(0,0,0,.25);
+  max-width:440px;width:100%;padding:24px;position:relative;}
+.panel h2{margin:0 0 6px;font-size:24px;}
+.panel p{color:var(--ink-soft);font-size:15px;line-height:1.6;margin:6px 0 14px;}
+.panel label{font-size:15px;font-weight:700;display:block;margin:14px 0 5px;}
+.panel input{width:100%;font-family:'Caveat',cursive;font-size:20px;letter-spacing:1px;
+  border:1.5px solid var(--line);border-radius:10px;padding:10px 12px;outline:none;background:var(--paper);}
+.panel input:focus{border-color:var(--sage-tape);}
+.panel .row{display:flex;gap:10px;margin-top:18px;}
+.btn{flex:1;font-family:inherit;font-size:17px;font-weight:700;border:none;border-radius:10px;
+  padding:11px;cursor:pointer;}
+.btn.go{background:var(--sage-tape);color:#fff;} .btn.go:hover{filter:brightness(.95);}
+.btn.ghost{background:var(--line);color:var(--ink);}
+.gen{font-family:'Caveat',cursive;font-size:15px;color:var(--sky-tape);cursor:pointer;margin-top:6px;display:inline-block;}
+.note{font-size:13px;color:var(--ink-soft);margin-top:14px;line-height:1.55;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1 class="title">我的手帳</h1>
+    <div class="date" id="date"></div>
+    <div class="sync-badge" id="syncBadge" title="同步設定">
+      <span class="sync-dot local" id="syncDot"></span>
+      <span id="syncText">本機</span>
+    </div>
+  </header>
+
+  <div class="tabs">
+    <button class="tab active" data-tab="memo">備忘錄<span class="cnt" id="memoCnt">0</span></button>
+    <button class="tab" data-tab="todo">待辦清單<span class="cnt" id="todoCnt">0</span></button>
+  </div>
+
+  <section id="memoView">
+    <button class="add-memo" id="addMemo">＋ 貼一張新便條</button>
+    <div class="memo-grid" id="memoGrid"></div>
+  </section>
+
+  <section id="todoView" style="display:none">
+    <div class="todo-add">
+      <span class="plus">＋</span>
+      <input id="todoInput" placeholder="今天要做什麼？輸入後按 Enter">
+    </div>
+    <div id="todoList"></div>
+  </section>
+</div>
+
+<!-- 同步設定 -->
+<div class="mask" id="mask">
+  <div class="panel">
+    <h2>裝置同步</h2>
+    <p>輸入一組「同步碼」，在手機與電腦填入<b>相同的碼</b>，資料就會自動同步。把它當密碼，別讓人猜到。</p>
+    <label>同步碼</label>
+    <input id="codeInput" placeholder="例如 kimo-techo-9f3k" autocomplete="off">
+    <span class="gen" id="genCode">↻ 幫我產生一組</span>
+    <div class="row">
+      <button class="btn ghost" id="cancelSync">取消</button>
+      <button class="btn go" id="saveSync">儲存並連線</button>
+    </div>
+    <p class="note" id="cfgNote"></p>
+  </div>
+</div>
+
+<script>
+/* ============ Firebase 設定：把你自己專案的設定貼進這裡 ============ */
+const firebaseConfig = {
+  apiKey: "AIzaSyDhy8Vy_-2A9RVStzHwPaQlnQGkQ83yTX4",
+  authDomain: "todo-list-76e32.firebaseapp.com",
+  projectId: "todo-list-76e32",
+  storageBucket: "todo-list-76e32.firebasestorage.app",
+  messagingSenderId: "329966222338",
+  appId: "1:329966222338:web:dc2971596ef9d58d473b1b",
+  measurementId: "G-9C1LX0RCM6"
+};
+/* ================================================================ */
+
+const LS_DATA="techo_data", LS_CODE="techo_sync_code";
+let state={memos:[],todos:[]};
+let db=null, unsub=null, isEditing=false, pendingRemote=null, writeTimer=null;
+const hasFirebase = !!(firebaseConfig.apiKey && firebaseConfig.projectId);
+
+/* ---------- 本機儲存 ---------- */
+function loadLocal(){
+  try{const d=JSON.parse(localStorage.getItem(LS_DATA));if(d){state.memos=d.memos||[];state.todos=d.todos||[];}}catch(e){}
+}
+function saveLocal(){localStorage.setItem(LS_DATA,JSON.stringify(state));}
+function getCode(){return localStorage.getItem(LS_CODE)||"";}
+function setCode(c){c?localStorage.setItem(LS_CODE,c):localStorage.removeItem(LS_CODE);}
+
+/* ---------- 雲端同步 ---------- */
+function setStatus(s){
+  const dot=document.getElementById('syncDot'),txt=document.getElementById('syncText');
+  dot.className='sync-dot '+s;
+  txt.textContent={online:'已同步',local:'本機',error:'連線失敗',connecting:'連線中'}[s]||'本機';
+}
+function initSync(){
+  if(!hasFirebase){setStatus('local');return;}
+  try{firebase.initializeApp(firebaseConfig);db=firebase.firestore();}
+  catch(e){console.error(e);setStatus('error');return;}
+  attachSync();
+}
+function attachSync(){
+  if(!db)return;
+  if(unsub){unsub();unsub=null;}
+  const code=getCode();
+  if(!code){setStatus('local');return;}
+  setStatus('connecting');
+  unsub=db.collection('notebooks').doc(code).onSnapshot(snap=>{
+    setStatus('online');
+    if(snap.metadata.hasPendingWrites)return;          // 自己剛寫入的，略過
+    const d=snap.data();
+    if(!d)return;
+    if(isEditing){pendingRemote=d;return;}             // 編輯中先暫存，blur 後再套用
+    applyRemote(d);
+  },err=>{console.error(err);setStatus('error');});
+}
+function applyRemote(d){
+  state.memos=d.memos||[];state.todos=d.todos||[];
+  saveLocal();renderMemos();renderTodos();updateCounts();
+}
+function pushCloud(){
+  saveLocal();
+  if(!db||!getCode())return;
+  clearTimeout(writeTimer);
+  writeTimer=setTimeout(()=>{
+    db.collection('notebooks').doc(getCode())
+      .set({memos:state.memos,todos:state.todos,updatedAt:Date.now()})
+      .catch(e=>console.error(e));
+  },600);
+}
+
+/* ---------- 工具 ---------- */
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+function autoGrow(el){el.style.height='auto';el.style.height=el.scrollHeight+'px';}
+
+/* ---------- 備忘錄 ---------- */
+const COLORS=['butter','rose','sage','sky','plain'];
+function renderMemos(){
+  const g=document.getElementById('memoGrid');g.innerHTML='';
+  if(!state.memos.length){g.innerHTML='<div class="empty">還沒有便條，貼一張吧 ✎</div>';return;}
+  state.memos.forEach(m=>{
+    const card=document.createElement('div');
+    card.className='memo '+(m.color||'plain');
+    card.style.transform='rotate('+(m.rot||0)+'deg)';
+    const ta=document.createElement('textarea');
+    ta.value=m.content||'';ta.placeholder='寫點什麼…';
+    ta.addEventListener('input',()=>{m.content=ta.value;autoGrow(ta);pushCloud();});
+    ta.addEventListener('focus',()=>{isEditing=true;});
+    ta.addEventListener('blur',()=>{isEditing=false;if(pendingRemote){applyRemote(pendingRemote);pendingRemote=null;}});
+    const foot=document.createElement('div');foot.className='foot';
+    const cols=document.createElement('div');cols.className='colors';
+    COLORS.forEach(c=>{
+      const s=document.createElement('span');s.className='swatch';s.dataset.c=c;
+      s.onclick=()=>{m.color=c;card.className='memo '+c;pushCloud();};
+      cols.appendChild(s);
+    });
+    const del=document.createElement('button');del.className='del';del.textContent='撕掉';
+    del.onclick=()=>{state.memos=state.memos.filter(x=>x.id!==m.id);renderMemos();updateCounts();pushCloud();};
+    foot.appendChild(cols);foot.appendChild(del);
+    card.appendChild(ta);card.appendChild(foot);g.appendChild(card);
+    autoGrow(ta);
+  });
+}
+document.getElementById('addMemo').onclick=()=>{
+  const rot=(Math.random()*4-2).toFixed(2);
+  state.memos.unshift({id:uid(),content:'',color:COLORS[Math.floor(Math.random()*4)],rot:rot});
+  renderMemos();updateCounts();pushCloud();
+  const first=document.querySelector('#memoGrid textarea');if(first)first.focus();
+};
+
+/* ---------- 待辦清單 ---------- */
+const CHECK='<svg viewBox="0 0 24 24"><path d="M4 13 L9.5 18.5 L20 5.5"/></svg>';
+function renderTodos(){
+  const list=document.getElementById('todoList');list.innerHTML='';
+  if(!state.todos.length){list.innerHTML='<div class="empty">清單空空的，新增第一件事 ✓</div>';return;}
+  state.todos.forEach(t=>{
+    const row=document.createElement('div');row.className='todo'+(t.done?' done':'');
+    const box=document.createElement('button');box.className='box';box.innerHTML=CHECK;
+    box.onclick=()=>{t.done=!t.done;row.classList.toggle('done',t.done);pushCloud();};
+    const txt=document.createElement('input');txt.className='txt';txt.value=t.text||'';
+    txt.addEventListener('input',()=>{t.text=txt.value;pushCloud();});
+    txt.addEventListener('focus',()=>{isEditing=true;});
+    txt.addEventListener('blur',()=>{isEditing=false;if(pendingRemote){applyRemote(pendingRemote);pendingRemote=null;}});
+    const del=document.createElement('button');del.className='del';del.textContent='刪除';
+    del.onclick=()=>{state.todos=state.todos.filter(x=>x.id!==t.id);renderTodos();updateCounts();pushCloud();};
+    row.appendChild(box);row.appendChild(txt);row.appendChild(del);list.appendChild(row);
+  });
+}
+const tin=document.getElementById('todoInput');
+tin.addEventListener('keydown',e=>{
+  if(e.key==='Enter'&&tin.value.trim()){
+    state.todos.push({id:uid(),text:tin.value.trim(),done:false});
+    tin.value='';renderTodos();updateCounts();pushCloud();
+  }
+});
+
+/* ---------- 分頁 / 計數 ---------- */
+function updateCounts(){
+  document.getElementById('memoCnt').textContent=state.memos.length;
+  document.getElementById('todoCnt').textContent=state.todos.filter(t=>!t.done).length;
+}
+document.querySelectorAll('.tab').forEach(b=>{
+  b.onclick=()=>{
+    document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active');
+    const t=b.dataset.tab;
+    document.getElementById('memoView').style.display=t==='memo'?'':'none';
+    document.getElementById('todoView').style.display=t==='todo'?'':'none';
+  };
+});
+
+/* ---------- 同步設定面板 ---------- */
+const mask=document.getElementById('mask'),codeInput=document.getElementById('codeInput');
+document.getElementById('syncBadge').onclick=()=>{
+  codeInput.value=getCode();
+  document.getElementById('cfgNote').textContent=
+    hasFirebase?'':'⚠ 尚未填入 Firebase 設定，目前僅本機儲存。請依教學把設定貼到檔案最上方的 firebaseConfig。';
+  mask.classList.add('show');
+};
+document.getElementById('cancelSync').onclick=()=>mask.classList.remove('show');
+document.getElementById('genCode').onclick=()=>{codeInput.value='techo-'+Math.random().toString(36).slice(2,10);};
+document.getElementById('saveSync').onclick=()=>{
+  setCode(codeInput.value.trim());
+  mask.classList.remove('show');
+  if(hasFirebase)attachSync();else setStatus('local');
+};
+
+/* ---------- 啟動 ---------- */
+(function(){
+  const d=new Date(),wk=['日','一','二','三','四','五','六'][d.getDay()];
+  document.getElementById('date').textContent=`${d.getFullYear()} / ${d.getMonth()+1} / ${d.getDate()} · 週${wk}`;
+  loadLocal();renderMemos();renderTodos();updateCounts();initSync();
+})();
+</script>
+</body>
+</html>
